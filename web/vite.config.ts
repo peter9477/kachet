@@ -5,7 +5,10 @@ export default defineConfig({
   plugins: [svelte()],
   server: {
     proxy: {
-      '/api': 'http://127.0.0.1:8710',
+      '/api': {
+        target: 'http://127.0.0.1:8710',
+        ws: true,
+      },
     },
   },
 })

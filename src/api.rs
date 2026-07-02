@@ -38,6 +38,7 @@ struct AppState {
 pub fn router(pool: SqlitePool, static_dir: Option<&Path>) -> Router {
     let state = AppState { pool };
     Router::new()
+        .route("/api/ws", get(ws_handler))
         .route("/api/commodities", get(list_commodities))
         .route("/api/accounts", get(list_accounts).post(create_account))
         .route(
@@ -155,6 +156,35 @@ async fn list_accounts(State(st): State<AppState>) -> ApiResult<Vec<AccountOut>>
     // Sort by code then name for a stable, ledger-like ordering.
     out.sort_by(|a, b| (&a.code, &a.name).cmp(&(&b.code, &b.name)));
     Ok(Json(out))
+}
+
+// ---------- websocket (connection status now; server push later) ----------
+
+async fn ws_handler(ws: axum::extract::ws::WebSocketUpgrade) -> Response {
+    ws.on_upgrade(handle_socket)
+}
+
+async fn handle_socket(mut socket: axum::extract::ws::WebSocket) {
+    use axum::extract::ws::Message;
+    // Periodic pings keep intermediaries from idling the connection out and
+    // let the client detect a dead server quickly. Future server-push
+    // messages will be JSON Text frames with a {"type": ...} envelope.
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
+    loop {
+        tokio::select! {
+            _ = interval.tick() => {
+                if socket.send(Message::Ping(Vec::new().into())).await.is_err() {
+                    break;
+                }
+            }
+            msg = socket.recv() => {
+                match msg {
+                    Some(Ok(_)) => {} // pongs / client chatter; nothing to do yet
+                    _ => break,
+                }
+            }
+        }
+    }
 }
 
 // ---------- account CRUD ----------
