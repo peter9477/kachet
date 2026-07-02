@@ -210,6 +210,7 @@ async fn handle_socket(mut socket: axum::extract::ws::WebSocket, st: AppState) {
     let hello = serde_json::json!({
         "type": "hello",
         "web_hash": web_hash(st.static_dir.as_deref()),
+        "version": env!("CARGO_PKG_VERSION"),
     });
     if socket.send(Message::Text(hello.to_string().into())).await.is_err() {
         return;

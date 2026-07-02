@@ -4,7 +4,7 @@
 // across reconnects, newer frontend code is available and we surface a
 // reload prompt rather than yanking the page out from under the user.
 
-export const conn = $state({ up: false, updateAvailable: false })
+export const conn = $state({ up: false, updateAvailable: false, version: '' })
 
 let attempts = 0
 // Hash of the assets this page was (presumably) loaded from: the first
@@ -27,6 +27,7 @@ function connect() {
       return
     }
     if (msg.type === 'hello' && typeof msg.web_hash === 'string') {
+      if (typeof msg.version === 'string') conn.version = msg.version
       if (loadedHash === null) loadedHash = msg.web_hash
       else if (msg.web_hash !== loadedHash) conn.updateAvailable = true
     }

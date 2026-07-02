@@ -33,12 +33,7 @@
 </script>
 
 <div class="topbar">
-  <h1>kachet <small>α</small></h1>
-  <span
-    class="conn-dot"
-    class:up={conn.up}
-    title={conn.up ? 'Connected to backend' : 'Backend unreachable — reconnecting…'}
-  >●</span>
+  <h1>kachet</h1>
   {#if current}
     {@const acct = accounts.find((a) => a.id === current)}
     <span>{acct?.name ?? ''}</span>
@@ -46,6 +41,14 @@
   {:else}
     <span class="hint">↑↓: move · ←→: collapse/expand · Enter: open register · type to filter · Insert: new · F2: edit · Del: delete</span>
   {/if}
+  <span class="topbar-right">
+    {#if conn.version}<span class="ver">v{conn.version}</span>{/if}
+    <span
+      class="conn-dot"
+      class:up={conn.up}
+      title={conn.up ? 'Connected to backend' : 'Backend unreachable — reconnecting…'}
+    >●</span>
+  </span>
 </div>
 
 {#if conn.updateAvailable}
