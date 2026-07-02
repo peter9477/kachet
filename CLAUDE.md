@@ -22,8 +22,8 @@ session memory (`kachet-project-goals`), not in this repo.
 ## Build & run
 
 ```sh
+(cd web && npm run build)          # BEFORE cargo build: web/dist is embedded via rust-embed
 cargo build
-(cd web && npm run build)          # outputs web/dist, served by the binary
 ./target/debug/kachet --db kachet.db import <file>.gnucash   # idempotent (INSERT OR REPLACE)
 ./target/debug/kachet --db kachet.db serve                        # http://127.0.0.1:8710
 # dev: `cargo run -- serve` + `cd web && npm run dev` (vite proxies /api to :8710)

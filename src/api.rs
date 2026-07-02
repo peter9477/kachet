@@ -1,7 +1,7 @@
 use crate::money;
 use anyhow::{Result, anyhow};
 use axum::extract::{Path as AxPath, State};
-use axum::http::StatusCode;
+use axum::http::{StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
@@ -11,15 +11,32 @@ use std::collections::HashMap;
 use std::path::Path;
 use tower_http::services::{ServeDir, ServeFile};
 
+/// Frontend assets compiled into the binary. `npm run build` in web/
+/// must run before `cargo build`.
+#[derive(rust_embed::RustEmbed)]
+#[folder = "web/dist"]
+struct Assets;
+
+async fn embedded_asset(uri: Uri) -> Response {
+    let path = uri.path().trim_start_matches('/');
+    let path = if path.is_empty() { "index.html" } else { path };
+    let file = Assets::get(path).or_else(|| Assets::get("index.html"));
+    match file {
+        Some(f) => {
+            let mime = mime_guess::from_path(path).first_or_octet_stream();
+            ([(header::CONTENT_TYPE, mime.as_ref())], f.data).into_response()
+        }
+        None => (StatusCode::NOT_FOUND, "not found").into_response(),
+    }
+}
+
 #[derive(Clone)]
 struct AppState {
     pool: SqlitePool,
 }
 
-pub fn router(pool: SqlitePool, static_dir: &Path) -> Router {
+pub fn router(pool: SqlitePool, static_dir: Option<&Path>) -> Router {
     let state = AppState { pool };
-    let serve = ServeDir::new(static_dir)
-        .fallback(ServeFile::new(static_dir.join("index.html")));
     Router::new()
         .route("/api/commodities", get(list_commodities))
         .route("/api/accounts", get(list_accounts).post(create_account))
@@ -34,8 +51,20 @@ pub fn router(pool: SqlitePool, static_dir: &Path) -> Router {
             axum::routing::put(update_tx).delete(delete_tx),
         )
         .with_state(state)
-        .fallback_service(serve)
+        .pipe(|r| match static_dir {
+            Some(dir) => r.fallback_service(
+                ServeDir::new(dir).fallback(ServeFile::new(dir.join("index.html"))),
+            ),
+            None => r.fallback(embedded_asset),
+        })
 }
+
+trait Pipe: Sized {
+    fn pipe<T>(self, f: impl FnOnce(Self) -> T) -> T {
+        f(self)
+    }
+}
+impl<T> Pipe for T {}
 
 /// Anyhow-compatible error type that renders as JSON.
 struct ApiError(StatusCode, String);

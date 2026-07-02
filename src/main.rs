@@ -25,9 +25,10 @@ enum Command {
     Serve {
         #[arg(long, default_value = "127.0.0.1:8710")]
         addr: String,
-        /// Directory of built frontend assets
-        #[arg(long, default_value = "web/dist")]
-        static_dir: PathBuf,
+        /// Serve frontend assets from this directory instead of the
+        /// copy embedded in the binary (useful during development)
+        #[arg(long)]
+        static_dir: Option<PathBuf>,
     },
 }
 
@@ -46,7 +47,7 @@ async fn main() -> Result<()> {
             );
         }
         Command::Serve { addr, static_dir } => {
-            let app = api::router(pool, &static_dir);
+            let app = api::router(pool, static_dir.as_deref());
             let listener = tokio::net::TcpListener::bind(&addr).await?;
             println!("kachet listening on http://{addr}");
             axum::serve(listener, app).await?;

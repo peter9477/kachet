@@ -6,11 +6,15 @@ Rust + SQLite backend, Svelte frontend, built for fast data entry and navigation
 ## Quick start
 
 ```sh
-cargo build --release
-(cd web && npm install && npm run build)
+(cd web && npm install && npm run build)            # must run before cargo build
+cargo build --release                               # embeds web/dist into the binary
 ./target/release/kachet import your-file.gnucash    # GnuCash XML, gzipped or plain
 ./target/release/kachet serve                       # http://127.0.0.1:8710
 ```
+
+The result is a single self-contained binary — frontend assets are embedded at
+compile time. During development, `kachet serve --static-dir web/dist` serves
+from disk instead (or use `npm run dev` for hot reload, which proxies /api).
 
 ## Keyboard reference
 
