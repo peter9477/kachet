@@ -48,6 +48,14 @@
   {/if}
 </div>
 
+{#if conn.updateAvailable}
+  <div class="update-banner">
+    kachet was updated on the server —
+    <button onclick={() => location.reload()}>reload now</button>
+    or press Ctrl+R / F5 whenever convenient. Unsaved edits are lost on reload.
+  </div>
+{/if}
+
 {#if error}
   <div class="error-msg">{error}</div>
 {/if}

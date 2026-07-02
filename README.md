@@ -16,6 +16,11 @@ The result is a single self-contained binary — frontend assets are embedded at
 compile time. During development, `kachet serve --static-dir web/dist` serves
 from disk instead (or use `npm run dev` for hot reload, which proxies /api).
 
+The header shows a live backend connection indicator (websocket with
+auto-reconnect). When the server comes back with newer frontend assets than
+the loaded page (mtime-hash comparison — "webhash"), a banner offers a reload
+at your convenience rather than reloading out from under you.
+
 ## Keyboard reference
 
 ### Accounts view

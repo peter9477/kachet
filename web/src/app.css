@@ -89,6 +89,23 @@ td.amount, td.balance, th.amount, th.balance { text-align: right; }
 .topbar h1 { font-size: 1.05em; margin: 0; }
 .conn-dot { color: #e05252; font-size: 0.9em; transition: color 0.3s; }
 .conn-dot.up { color: #7ee081; }
+
+.update-banner {
+  background: #fff3cd;
+  border-bottom: 1px solid #d4a017;
+  padding: 5px 10px;
+  font-size: 0.9em;
+}
+.update-banner button {
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
 .topbar .hint { font-size: 0.85em; opacity: 0.85; }
 
 .scroll { flex: 1; overflow-y: auto; }

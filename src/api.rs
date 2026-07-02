@@ -30,13 +30,49 @@ async fn embedded_asset(uri: Uri) -> Response {
     }
 }
 
+/// Hash of the web assets' modification times ("webhash" technique):
+/// lets clients detect that the server is running newer frontend code.
+/// FNV-1a over the sorted mtimes — change detection, not integrity.
+fn web_hash(static_dir: Option<&Path>) -> String {
+    let mut mtimes: Vec<u64> = match static_dir {
+        Some(dir) => std::fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .chain(std::fs::read_dir(dir.join("assets")).into_iter().flatten().flatten())
+            .filter_map(|e| e.metadata().ok())
+            .filter(|m| m.is_file())
+            .filter_map(|m| m.modified().ok())
+            .filter_map(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+            .collect(),
+        None => Assets::iter()
+            .filter_map(|p| Assets::get(&p))
+            .filter_map(|f| f.metadata.last_modified())
+            .collect(),
+    };
+    mtimes.sort_unstable();
+    let mut h: u64 = 0xcbf29ce484222325;
+    for t in mtimes {
+        for b in t.to_le_bytes() {
+            h ^= b as u64;
+            h = h.wrapping_mul(0x100000001b3);
+        }
+    }
+    format!("{h:016x}")
+}
+
 #[derive(Clone)]
 struct AppState {
     pool: SqlitePool,
+    static_dir: Option<std::path::PathBuf>,
 }
 
 pub fn router(pool: SqlitePool, static_dir: Option<&Path>) -> Router {
-    let state = AppState { pool };
+    let state = AppState {
+        pool,
+        static_dir: static_dir.map(|p| p.to_path_buf()),
+    };
     Router::new()
         .route("/api/ws", get(ws_handler))
         .route("/api/commodities", get(list_commodities))
@@ -160,12 +196,24 @@ async fn list_accounts(State(st): State<AppState>) -> ApiResult<Vec<AccountOut>>
 
 // ---------- websocket (connection status now; server push later) ----------
 
-async fn ws_handler(ws: axum::extract::ws::WebSocketUpgrade) -> Response {
-    ws.on_upgrade(handle_socket)
+async fn ws_handler(
+    State(st): State<AppState>,
+    ws: axum::extract::ws::WebSocketUpgrade,
+) -> Response {
+    ws.on_upgrade(move |socket| handle_socket(socket, st))
 }
 
-async fn handle_socket(mut socket: axum::extract::ws::WebSocket) {
+async fn handle_socket(mut socket: axum::extract::ws::WebSocket, st: AppState) {
     use axum::extract::ws::Message;
+    // Greet with the current web-asset hash so the client can detect that
+    // the server is running newer frontend code than the loaded page.
+    let hello = serde_json::json!({
+        "type": "hello",
+        "web_hash": web_hash(st.static_dir.as_deref()),
+    });
+    if socket.send(Message::Text(hello.to_string().into())).await.is_err() {
+        return;
+    }
     // Periodic pings keep intermediaries from idling the connection out and
     // let the client detect a dead server quickly. Future server-push
     // messages will be JSON Text frames with a {"type": ...} envelope.
