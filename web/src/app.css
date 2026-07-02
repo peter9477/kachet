@@ -1,0 +1,113 @@
+:root {
+  --bg: #fdfdf8;
+  --fg: #1a1a1a;
+  --dim: #777;
+  --row-alt: #f4f2e8;
+  --sel-bg: #ffe9a8;
+  --sel-border: #d4a017;
+  --head-bg: #4a7c59;
+  --head-fg: #fff;
+  --split-bg: #efe9d8;
+  --neg: #b00020;
+  --accent: #2a6f97;
+  font-size: 15px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+#app { height: 100vh; display: flex; flex-direction: column; }
+
+.mono, td.num-col, td.amount, td.balance {
+  font-variant-numeric: tabular-nums;
+}
+
+table.register {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+table.register th {
+  background: var(--head-bg);
+  color: var(--head-fg);
+  text-align: left;
+  padding: 3px 8px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+table.register td {
+  padding: 2px 8px;
+  border-bottom: 1px solid #e5e2d5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+table.register tr.alt td { background: var(--row-alt); }
+table.register tr.selected td {
+  background: var(--sel-bg);
+  border-top: 1px solid var(--sel-border);
+  border-bottom: 1px solid var(--sel-border);
+}
+table.register tr.splitrow td {
+  background: var(--split-bg);
+  color: #444;
+  font-size: 0.92em;
+}
+table.register tr.splitrow.selected td { background: var(--sel-bg); }
+
+td.amount, td.balance, th.amount, th.balance { text-align: right; }
+.neg { color: var(--neg); }
+
+.statusbar {
+  border-top: 2px solid var(--head-bg);
+  padding: 4px 10px;
+  display: flex;
+  gap: 1.5em;
+  font-size: 0.9em;
+  color: var(--dim);
+  background: #f7f5ec;
+}
+.statusbar b { color: var(--fg); }
+
+.topbar {
+  background: var(--head-bg);
+  color: var(--head-fg);
+  padding: 5px 10px;
+  display: flex;
+  gap: 1em;
+  align-items: baseline;
+}
+.topbar h1 { font-size: 1.05em; margin: 0; }
+.topbar .hint { font-size: 0.85em; opacity: 0.85; }
+
+.scroll { flex: 1; overflow-y: auto; }
+
+.editor td { background: #fff8dc !important; }
+.editor input, .editor select {
+  width: 100%;
+  font: inherit;
+  padding: 1px 4px;
+  border: 1px solid var(--sel-border);
+  border-radius: 2px;
+  background: white;
+}
+.editor input:focus, .editor select:focus {
+  outline: 2px solid var(--accent);
+}
+.error-msg {
+  color: var(--neg);
+  padding: 4px 10px;
+  background: #ffecec;
+}
+
+.tree-indent { color: var(--dim); }
+.placeholder-name { font-style: italic; color: var(--dim); }
