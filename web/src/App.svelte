@@ -33,7 +33,7 @@
 </script>
 
 <div class="topbar">
-  <h1>kachet</h1>
+  <h1>kachet <small>α</small></h1>
   <span
     class="conn-dot"
     class:up={conn.up}
