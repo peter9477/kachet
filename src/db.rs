@@ -60,6 +60,11 @@ CREATE INDEX IF NOT EXISTS idx_splits_account ON splits(account_id);
 CREATE INDEX IF NOT EXISTS idx_splits_tx ON splits(tx_id);
 CREATE INDEX IF NOT EXISTS idx_tx_date ON transactions(date_posted);
 CREATE INDEX IF NOT EXISTS idx_prices_date ON prices(commodity_id, date);
+
+-- Seed common currencies so a fresh database is usable before any import.
+INSERT OR IGNORE INTO commodities (id, namespace, mnemonic, fraction) VALUES
+    ('CURRENCY:CAD', 'CURRENCY', 'CAD', 100),
+    ('CURRENCY:USD', 'CURRENCY', 'USD', 100);
 "#;
 
 pub async fn open(path: &Path) -> Result<SqlitePool> {

@@ -21,7 +21,12 @@ pub fn router(pool: SqlitePool, static_dir: &Path) -> Router {
     let serve = ServeDir::new(static_dir)
         .fallback(ServeFile::new(static_dir.join("index.html")));
     Router::new()
-        .route("/api/accounts", get(list_accounts))
+        .route("/api/commodities", get(list_commodities))
+        .route("/api/accounts", get(list_accounts).post(create_account))
+        .route(
+            "/api/accounts/{id}",
+            axum::routing::put(update_account).delete(delete_account),
+        )
         .route("/api/accounts/{id}/register", get(register))
         .route("/api/transactions", axum::routing::post(create_tx))
         .route(
@@ -121,6 +126,190 @@ async fn list_accounts(State(st): State<AppState>) -> ApiResult<Vec<AccountOut>>
     // Sort by code then name for a stable, ledger-like ordering.
     out.sort_by(|a, b| (&a.code, &a.name).cmp(&(&b.code, &b.name)));
     Ok(Json(out))
+}
+
+// ---------- account CRUD ----------
+
+const ACCOUNT_KINDS: &[&str] = &[
+    "ASSET", "BANK", "CASH", "LIABILITY", "CREDIT", "INCOME", "EXPENSE", "EQUITY", "TRADING",
+];
+
+#[derive(Deserialize)]
+struct AccountIn {
+    name: String,
+    kind: String,
+    commodity_id: String,
+    #[serde(default)]
+    parent_id: Option<String>,
+    #[serde(default)]
+    code: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    placeholder: bool,
+    #[serde(default)]
+    hidden: bool,
+}
+
+async fn validate_account(pool: &SqlitePool, body: &AccountIn, self_id: Option<&str>) -> Result<()> {
+    if body.name.trim().is_empty() {
+        return Err(anyhow!("account name is required"));
+    }
+    if !ACCOUNT_KINDS.contains(&body.kind.as_str()) {
+        return Err(anyhow!("invalid account type '{}'", body.kind));
+    }
+    let cmdty = sqlx::query("SELECT id FROM commodities WHERE id = ?")
+        .bind(&body.commodity_id)
+        .fetch_optional(pool)
+        .await?;
+    if cmdty.is_none() {
+        return Err(anyhow!("unknown commodity {}", body.commodity_id));
+    }
+    if let Some(pid) = &body.parent_id {
+        // Walk up from the proposed parent; it must exist and not pass
+        // through the account itself (cycle).
+        let mut cur = Some(pid.clone());
+        let mut hops = 0;
+        while let Some(id) = cur {
+            if Some(id.as_str()) == self_id {
+                return Err(anyhow!("parent would create a cycle"));
+            }
+            let row = sqlx::query("SELECT parent_id FROM accounts WHERE id = ?")
+                .bind(&id)
+                .fetch_optional(pool)
+                .await?
+                .ok_or_else(|| anyhow!("unknown parent account {id}"))?;
+            cur = row.get("parent_id");
+            hops += 1;
+            if hops > 100 {
+                return Err(anyhow!("account tree too deep"));
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn create_account(
+    State(st): State<AppState>,
+    Json(body): Json<AccountIn>,
+) -> ApiResult<serde_json::Value> {
+    validate_account(&st.pool, &body, None).await?;
+    let id = new_guid();
+    sqlx::query(
+        "INSERT INTO accounts (id, name, kind, commodity_id, parent_id, code, description, placeholder, hidden)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&id)
+    .bind(body.name.trim())
+    .bind(&body.kind)
+    .bind(&body.commodity_id)
+    .bind(&body.parent_id)
+    .bind(&body.code)
+    .bind(&body.description)
+    .bind(body.placeholder)
+    .bind(body.hidden)
+    .execute(&st.pool)
+    .await?;
+    Ok(Json(serde_json::json!({ "id": id })))
+}
+
+async fn update_account(
+    State(st): State<AppState>,
+    AxPath(id): AxPath<String>,
+    Json(body): Json<AccountIn>,
+) -> ApiResult<serde_json::Value> {
+    validate_account(&st.pool, &body, Some(&id)).await?;
+    // Changing commodity under existing splits would corrupt quantities.
+    let has_splits: i64 = sqlx::query("SELECT COUNT(*) c FROM splits WHERE account_id = ?")
+        .bind(&id)
+        .fetch_one(&st.pool)
+        .await?
+        .get("c");
+    if has_splits > 0 {
+        let old: Option<String> = sqlx::query("SELECT commodity_id FROM accounts WHERE id = ?")
+            .bind(&id)
+            .fetch_optional(&st.pool)
+            .await?
+            .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, "no such account".into()))?
+            .get("commodity_id");
+        if old.as_deref() != Some(body.commodity_id.as_str()) {
+            return Err(anyhow!("cannot change commodity of an account with transactions").into());
+        }
+    }
+    let res = sqlx::query(
+        "UPDATE accounts SET name = ?, kind = ?, commodity_id = ?, parent_id = ?,
+                             code = ?, description = ?, placeholder = ?, hidden = ?
+         WHERE id = ? AND kind != 'ROOT'",
+    )
+    .bind(body.name.trim())
+    .bind(&body.kind)
+    .bind(&body.commodity_id)
+    .bind(&body.parent_id)
+    .bind(&body.code)
+    .bind(&body.description)
+    .bind(body.placeholder)
+    .bind(body.hidden)
+    .bind(&id)
+    .execute(&st.pool)
+    .await?;
+    if res.rows_affected() == 0 {
+        return Err(ApiError(StatusCode::NOT_FOUND, "no such account".into()));
+    }
+    Ok(Json(serde_json::json!({ "id": id })))
+}
+
+async fn delete_account(
+    State(st): State<AppState>,
+    AxPath(id): AxPath<String>,
+) -> ApiResult<serde_json::Value> {
+    let splits: i64 = sqlx::query("SELECT COUNT(*) c FROM splits WHERE account_id = ?")
+        .bind(&id)
+        .fetch_one(&st.pool)
+        .await?
+        .get("c");
+    if splits > 0 {
+        return Err(anyhow!("account has {splits} splits; move or delete them first").into());
+    }
+    let children: i64 = sqlx::query("SELECT COUNT(*) c FROM accounts WHERE parent_id = ?")
+        .bind(&id)
+        .fetch_one(&st.pool)
+        .await?
+        .get("c");
+    if children > 0 {
+        return Err(anyhow!("account has {children} child accounts; delete or reparent them first").into());
+    }
+    let res = sqlx::query("DELETE FROM accounts WHERE id = ? AND kind != 'ROOT'")
+        .bind(&id)
+        .execute(&st.pool)
+        .await?;
+    if res.rows_affected() == 0 {
+        return Err(ApiError(StatusCode::NOT_FOUND, "no such account".into()));
+    }
+    Ok(Json(serde_json::json!({ "deleted": id })))
+}
+
+#[derive(Serialize)]
+struct CommodityOut {
+    id: String,
+    namespace: String,
+    mnemonic: String,
+    fraction: i64,
+}
+
+async fn list_commodities(State(st): State<AppState>) -> ApiResult<Vec<CommodityOut>> {
+    let rows = sqlx::query("SELECT id, namespace, mnemonic, fraction FROM commodities ORDER BY id")
+        .fetch_all(&st.pool)
+        .await?;
+    Ok(Json(
+        rows.iter()
+            .map(|r| CommodityOut {
+                id: r.get("id"),
+                namespace: r.get("namespace"),
+                mnemonic: r.get("mnemonic"),
+                fraction: r.get("fraction"),
+            })
+            .collect(),
+    ))
 }
 
 // ---------- register ----------

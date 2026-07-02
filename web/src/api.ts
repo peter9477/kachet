@@ -12,6 +12,24 @@ export interface Account {
   tx_count: number
 }
 
+export interface Commodity {
+  id: string
+  namespace: string
+  mnemonic: string
+  fraction: number
+}
+
+export interface AccountIn {
+  name: string
+  kind: string
+  commodity_id: string
+  parent_id?: string | null
+  code?: string
+  description?: string
+  placeholder?: boolean
+  hidden?: boolean
+}
+
 export interface Split {
   id: string
   account_id: string
@@ -73,6 +91,21 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   accounts: () => req<Account[]>('/api/accounts'),
+  commodities: () => req<Commodity[]>('/api/commodities'),
+  createAccount: (a: AccountIn) =>
+    req<{ id: string }>('/api/accounts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(a),
+    }),
+  updateAccount: (id: string, a: AccountIn) =>
+    req<{ id: string }>(`/api/accounts/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(a),
+    }),
+  deleteAccount: (id: string) =>
+    req<{ deleted: string }>(`/api/accounts/${id}`, { method: 'DELETE' }),
   register: (id: string) => req<Register>(`/api/accounts/${id}/register`),
   createTx: (tx: TxIn) =>
     req<{ id: string }>('/api/transactions', {

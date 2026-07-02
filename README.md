@@ -21,6 +21,9 @@ cargo build --release
 | ← → | collapse / expand subtree (← also jumps to parent) |
 | Enter | open account register |
 | any text | filter accounts (Esc clears) |
+| Insert | new account (defaults to nesting under a selected placeholder, else as sibling) |
+| F2 | edit selected account |
+| Delete | delete selected account (only when it has no transactions or children) |
 
 ### Register view
 | Key | Action |

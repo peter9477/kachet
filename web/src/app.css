@@ -109,5 +109,45 @@ td.amount, td.balance, th.amount, th.balance { text-align: right; }
   background: #ffecec;
 }
 
+.acct-editor {
+  background: #fff8dc;
+  border-bottom: 2px solid var(--sel-border);
+  padding: 8px 10px 4px;
+}
+.acct-editor-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 2fr 1fr 2fr auto;
+  gap: 8px;
+  align-items: end;
+}
+.acct-editor label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.8em;
+  color: var(--dim);
+  gap: 2px;
+}
+.acct-editor label.check {
+  flex-direction: row;
+  align-items: center;
+  color: var(--fg);
+  font-size: 0.9em;
+}
+.acct-editor input, .acct-editor select {
+  font: inherit;
+  font-size: 1rem;
+  padding: 2px 4px;
+  border: 1px solid var(--sel-border);
+  border-radius: 2px;
+}
+.acct-editor input:focus, .acct-editor select:focus {
+  outline: 2px solid var(--accent);
+}
+.acct-editor-hint {
+  font-size: 0.8em;
+  color: var(--dim);
+  padding-top: 4px;
+}
+
 .tree-indent { color: var(--dim); }
 .placeholder-name { font-style: italic; color: var(--dim); }

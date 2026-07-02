@@ -38,7 +38,7 @@
     <span>{acct?.name ?? ''}</span>
     <span class="hint">Esc/Backspace: back · ↑↓ PgUp PgDn: move · [ ]: month · &lbrace; &rbrace;: year · Space: splits · n: new · Enter: edit · j: jump · Del: delete</span>
   {:else}
-    <span class="hint">↑↓: move · ←→: collapse/expand · Enter: open register · type to filter</span>
+    <span class="hint">↑↓: move · ←→: collapse/expand · Enter: open register · type to filter · Insert: new · F2: edit · Del: delete</span>
   {/if}
 </div>
 
@@ -57,5 +57,5 @@
     />
   {/key}
 {:else}
-  <AccountTree {accounts} onopen={openAccount} />
+  <AccountTree {accounts} onopen={openAccount} onchanged={reload} />
 {/if}

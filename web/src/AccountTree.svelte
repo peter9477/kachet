@@ -1,7 +1,11 @@
 <script lang="ts">
-  import type { Account } from './api'
+  import { api, type Account, type Commodity } from './api'
 
-  let { accounts, onopen }: { accounts: Account[]; onopen: (id: string) => void } = $props()
+  let {
+    accounts,
+    onopen,
+    onchanged,
+  }: { accounts: Account[]; onopen: (id: string) => void; onchanged: () => void } = $props()
 
   interface Node {
     acct: Account
@@ -12,6 +16,122 @@
   let collapsed: Set<string> = $state(new Set())
   let selected = $state(0)
   let filter = $state('')
+  let error: string | null = $state(null)
+
+  // ---- account editor ----
+  const KINDS = ['ASSET', 'BANK', 'CASH', 'LIABILITY', 'CREDIT', 'INCOME', 'EXPENSE', 'EQUITY', 'TRADING']
+  interface Editor {
+    id: string | null // null = new account
+    name: string
+    kind: string
+    commodity_id: string
+    parent_id: string
+    code: string
+    description: string
+    placeholder: boolean
+  }
+  let editor: Editor | null = $state(null)
+  let commodities: Commodity[] = $state([])
+
+  async function ensureCommodities() {
+    if (!commodities.length) {
+      try {
+        commodities = await api.commodities()
+      } catch (e: any) {
+        error = e.message
+      }
+    }
+  }
+
+  // Parent options: only accounts that exist in the visible book (root excluded).
+  const parentOptions = $derived(
+    [...accounts].sort(
+      (x, y) => (x.code ?? '￿').localeCompare(y.code ?? '￿') || x.name.localeCompare(y.name),
+    ),
+  )
+
+  function openNew() {
+    const sel = rows[selected]?.acct
+    ensureCommodities()
+    editor = {
+      id: null,
+      name: '',
+      kind: sel?.kind ?? 'ASSET',
+      commodity_id: sel?.commodity_id ?? 'CURRENCY:CAD',
+      // If sitting on a placeholder, default to nesting under it;
+      // otherwise default to being a sibling of the selection.
+      parent_id: sel ? (sel.placeholder ? sel.id : (sel.parent_id ?? '')) : '',
+      code: '',
+      description: '',
+      placeholder: false,
+    }
+    focusEditor()
+  }
+
+  function openEdit() {
+    const sel = rows[selected]?.acct
+    if (!sel) return
+    ensureCommodities()
+    const ids = new Set(accounts.map((a) => a.id))
+    editor = {
+      id: sel.id,
+      name: sel.name,
+      kind: sel.kind,
+      commodity_id: sel.commodity_id ?? 'CURRENCY:CAD',
+      parent_id: sel.parent_id && ids.has(sel.parent_id) ? sel.parent_id : '',
+      code: sel.code ?? '',
+      description: sel.description ?? '',
+      placeholder: sel.placeholder,
+    }
+    focusEditor()
+  }
+
+  function focusEditor() {
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLInputElement>('.acct-editor input[data-first]')?.focus()
+    })
+  }
+
+  async function saveEditor() {
+    if (!editor) return
+    try {
+      const body = {
+        name: editor.name,
+        kind: editor.kind,
+        commodity_id: editor.commodity_id,
+        parent_id: editor.parent_id || null,
+        code: editor.code || undefined,
+        description: editor.description || undefined,
+        placeholder: editor.placeholder,
+      }
+      const savedName = editor.name
+      if (editor.id) await api.updateAccount(editor.id, body)
+      else await api.createAccount(body)
+      editor = null
+      error = null
+      onchanged()
+      // Reselect the saved account once the refreshed list arrives.
+      requestAnimationFrame(() => {
+        const i = rows.findIndex((r) => r.acct.name === savedName)
+        if (i >= 0) selected = i
+      })
+    } catch (e: any) {
+      error = e.message
+    }
+  }
+
+  async function deleteSelected() {
+    const sel = rows[selected]?.acct
+    if (!sel) return
+    if (!confirm(`Delete account "${sel.name}"?`)) return
+    try {
+      await api.deleteAccount(sel.id)
+      error = null
+      onchanged()
+    } catch (e: any) {
+      error = e.message
+    }
+  }
 
   // Flatten the tree into visible rows, respecting collapse state.
   let rows: Node[] = $derived.by(() => {
@@ -53,8 +173,36 @@
   })
 
   function onkeydown(e: KeyboardEvent) {
+    if (editor) {
+      if (e.key === 'Escape') {
+        editor = null
+        e.preventDefault()
+      } else if (e.key === 'Enter') {
+        saveEditor()
+        e.preventDefault()
+      }
+      return
+    }
+    if (e.key === 'Insert') {
+      openNew()
+      e.preventDefault()
+      return
+    }
+    if (e.key === 'F2') {
+      openEdit()
+      e.preventDefault()
+      return
+    }
+    if (e.key === 'Delete') {
+      deleteSelected()
+      e.preventDefault()
+      return
+    }
     const n = rows.length
-    if (!n) return
+    if (!n) {
+      if (e.key !== 'Escape' && e.key !== 'Backspace' && e.key.length === 1) filter += e.key
+      return
+    }
     switch (e.key) {
       case 'ArrowDown':
         selected = Math.min(n - 1, selected + 1)
@@ -123,6 +271,46 @@
 
 <svelte:window onkeydown={onkeydown} />
 
+{#if editor}
+  <div class="acct-editor">
+    <div class="acct-editor-grid">
+      <label>Name <input data-first type="text" bind:value={editor.name} /></label>
+      <label>Code <input type="text" bind:value={editor.code} /></label>
+      <label>Type
+        <select bind:value={editor.kind}>
+          {#each KINDS as k}<option value={k}>{k}</option>{/each}
+        </select>
+      </label>
+      <label>Parent
+        <select bind:value={editor.parent_id}>
+          <option value="">— top level —</option>
+          {#each parentOptions as a (a.id)}
+            {#if a.id !== editor.id}
+              <option value={a.id}>{a.code ? a.code + ' · ' : ''}{a.name}</option>
+            {/if}
+          {/each}
+        </select>
+      </label>
+      <label>Commodity
+        <select bind:value={editor.commodity_id}>
+          {#each commodities as c (c.id)}
+            <option value={c.id}>{c.mnemonic} ({c.namespace})</option>
+          {/each}
+        </select>
+      </label>
+      <label>Description <input type="text" bind:value={editor.description} /></label>
+      <label class="check"><input type="checkbox" bind:checked={editor.placeholder} /> Placeholder</label>
+    </div>
+    <div class="acct-editor-hint">
+      {editor.id ? 'Editing account' : 'New account'} — Enter: save · Esc: cancel
+    </div>
+  </div>
+{/if}
+
+{#if error}
+  <div class="error-msg">{error}</div>
+{/if}
+
 <div class="scroll">
   <table class="register">
     <thead>
@@ -159,4 +347,5 @@
 <div class="statusbar">
   <span><b>{rows.length}</b> accounts</span>
   {#if filter}<span>filter: <b>{filter}</b> (Esc clears)</span>{/if}
+  <span>Insert: new · F2: edit · Del: delete</span>
 </div>
