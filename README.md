@@ -5,7 +5,7 @@ Rust + SQLite backend, Svelte frontend, built for fast data entry and navigation
 
 ## Quick start
 
-Requires Rust, Node.js, and [just](https://github.com/casey/just):
+Requires Rust, Node.js 20+, and [just](https://github.com/casey/just):
 
 ```sh
 just serve                        # from a fresh clone: installs, builds, runs
