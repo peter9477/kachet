@@ -266,7 +266,8 @@ export default {
         } else if (e.key === 'Enter' && !e.shiftKey && !e.altKey) {
           saveEditor()
           e.preventDefault()
-        } else if (e.key === 'Insert' || (e.altKey && e.key === 's')) {
+          // e.code, not e.key: on macOS Option+S types "ß"
+        } else if (e.key === 'Insert' || (e.altKey && e.code === 'KeyS')) {
           addSplitLine()
           e.preventDefault()
         }

@@ -171,17 +171,21 @@ export default {
         }
         return
       }
-      if (e.key === 'Insert') {
+      // Mac keyboards have no Insert, and their Delete is Backspace
+      // (used here for filter editing) — so each action has a
+      // modifier-based alternate. Ctrl+letter is safe on macOS because
+      // the browser's own shortcuts live on Cmd.
+      if (e.key === 'Insert' || (e.ctrlKey && e.code === 'KeyN')) {
         openNew()
         e.preventDefault()
         return
       }
-      if (e.key === 'F2') {
+      if (e.key === 'F2' || (e.ctrlKey && e.code === 'KeyE')) {
         openEdit()
         e.preventDefault()
         return
       }
-      if (e.key === 'Delete') {
+      if (e.key === 'Delete' || ((e.metaKey || e.ctrlKey) && e.key === 'Backspace')) {
         deleteSelected()
         e.preventDefault()
         return
@@ -325,7 +329,7 @@ export default {
 <div class="statusbar">
   <span><b>{{ rows.length }}</b> accounts</span>
   <span v-if="filter">filter: <b>{{ filter }}</b> (Esc clears)</span>
-  <span>Insert: new · F2: edit · Del: delete</span>
+  <span>Insert/⌃N: new · F2/⌃E: edit · Del/⌘⌫: delete</span>
 </div>
 `,
 }

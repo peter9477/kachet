@@ -41,7 +41,7 @@ const App = {
     <span class="hint">Esc/Backspace: back · ↑↓ PgUp PgDn: move · [ ]: month · { }: year · Space: splits · n: new · Enter: edit · j: jump · Del: delete</span>
   </template>
   <template v-else>
-    <span class="hint">↑↓: move · ←→: collapse/expand · Enter: open register · type to filter · Insert: new · F2: edit · Del: delete</span>
+    <span class="hint">↑↓: move · ←→: collapse/expand · Enter: open register · type to filter · Insert/⌃N: new · F2/⌃E: edit · Del/⌘⌫: delete</span>
   </template>
   <span class="topbar-right">
     <span v-if="conn.version" class="ver">v{{ conn.version }}</span>

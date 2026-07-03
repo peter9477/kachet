@@ -36,9 +36,9 @@ at your convenience rather than reloading out from under you.
 | ← → | collapse / expand subtree (← also jumps to parent) |
 | Enter | open account register |
 | any text | filter accounts (Esc clears) |
-| Insert | new account (defaults to nesting under a selected placeholder, else as sibling) |
-| F2 | edit selected account |
-| Delete | delete selected account (only when it has no transactions or children) |
+| Insert or Ctrl+N | new account (defaults to nesting under a selected placeholder, else as sibling) |
+| F2 or Ctrl+E | edit selected account |
+| Delete or Cmd/Ctrl+Backspace | delete selected account (only when it has no transactions or children) |
 
 ### Register view
 | Key | Action |
@@ -57,7 +57,7 @@ at your convenience rather than reloading out from under you.
 | Key | Action |
 |---|---|
 | Tab / Shift+Tab | move between fields |
-| Insert or Alt+S | add a split line |
+| Insert or Alt/Option+S | add a split line |
 | Enter | save (leaving exactly one amount blank auto-balances it) |
 | Esc | cancel |
 
