@@ -1,6 +1,7 @@
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { api } from './api.js'
 import { ensureRowVisible } from './dom.js'
+import { hints } from './keys.js'
 
 const KINDS = ['ASSET', 'BANK', 'CASH', 'LIABILITY', 'CREDIT', 'INCOME', 'EXPENSE', 'EQUITY', 'TRADING']
 
@@ -260,7 +261,7 @@ export default {
     const indent = (depth) => ' '.repeat(depth * 3)
 
     return {
-      KINDS, collapsed, selected, filter, error, editor, commodities, rows, parentOptions,
+      KINDS, hints, collapsed, selected, filter, error, editor, commodities, rows, parentOptions,
       openNew, openEdit, saveEditor, deleteSelected, indent,
       open: (id) => emit('open', id),
     }
@@ -329,7 +330,7 @@ export default {
 <div class="statusbar">
   <span><b>{{ rows.length }}</b> accounts</span>
   <span v-if="filter">filter: <b>{{ filter }}</b> (Esc clears)</span>
-  <span>Insert/⌃N: new · F2/⌃E: edit · Del/⌘⌫: delete</span>
+  <span>{{ hints.newItem }}: new · {{ hints.edit }}: edit · {{ hints.del }}: delete</span>
 </div>
 `,
 }

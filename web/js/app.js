@@ -1,6 +1,7 @@
 import { createApp, ref, computed } from 'vue'
 import { api } from './api.js'
 import { conn } from './conn.js'
+import { hints } from './keys.js'
 import AccountTree from './account-tree.js'
 import Register from './register.js'
 
@@ -27,7 +28,7 @@ const App = {
     reload()
 
     return {
-      accounts, error, conn, current, currentName, regKey, reload,
+      accounts, error, conn, current, currentName, regKey, reload, hints,
       openAccount: (id) => (stack.value = [...stack.value, id]),
       goBack: () => (stack.value = stack.value.slice(0, -1)),
       reloadPage: () => location.reload(),
@@ -38,10 +39,10 @@ const App = {
   <h1>kachet</h1>
   <template v-if="current">
     <span>{{ currentName }}</span>
-    <span class="hint">Esc/Backspace: back · ↑↓ PgUp PgDn: move · [ ]: month · { }: year · Space: splits · n: new · Enter: edit · j: jump · Del: delete</span>
+    <span class="hint">Esc/Backspace: back · ↑↓ PgUp PgDn: move · [ ]: month · { }: year · Space: splits · n: new · Enter: edit · j: jump · {{ hints.regDelete }}: delete</span>
   </template>
   <template v-else>
-    <span class="hint">↑↓: move · ←→: collapse/expand · Enter: open register · type to filter · Insert/⌃N: new · F2/⌃E: edit · Del/⌘⌫: delete</span>
+    <span class="hint">↑↓: move · ←→: collapse/expand · Enter: open register · type to filter · {{ hints.newItem }}: new · {{ hints.edit }}: edit · {{ hints.del }}: delete</span>
   </template>
   <span class="topbar-right">
     <span v-if="conn.version" class="ver">v{{ conn.version }}</span>

@@ -1,6 +1,7 @@
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { api } from './api.js'
 import { ensureRowVisible, fmtSigned } from './dom.js'
+import { hints } from './keys.js'
 
 function todayISO() {
   const d = new Date()
@@ -337,7 +338,7 @@ export default {
     onUnmounted(() => window.removeEventListener('keydown', onkeydown))
 
     return {
-      reg, error, selected, expanded, editor, rows, kindLabels, selectableAccounts,
+      reg, error, selected, expanded, editor, rows, kindLabels, selectableAccounts, hints,
       fmtSigned, otherLabel, openEdit, removeSplitLine, editorImbalance,
       select: (i) => (selected.value = i),
     }
@@ -413,7 +414,7 @@ export default {
           </tr>
           <tr class="editor">
             <td colspan="8" style="color: var(--dim)">
-              Enter: save · Esc: cancel · Insert / Alt+S: add split line
+              Enter: save · Esc: cancel · {{ hints.addSplit }}: add split line
             </td>
           </tr>
         </template>
@@ -446,7 +447,7 @@ export default {
         </tr>
         <tr class="editor">
           <td colspan="8" style="color: var(--dim)">
-            Enter: save · Esc: cancel · Insert / Alt+S: add split line
+            Enter: save · Esc: cancel · {{ hints.addSplit }}: add split line
           </td>
         </tr>
       </template>
