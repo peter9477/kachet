@@ -5,6 +5,7 @@ default:
 
 # Install frontend dependencies
 setup:
+    @command -v npm >/dev/null || { echo "error: npm not found — kachet needs Node.js to build its frontend (runtime does not; assets are embedded in the binary). Install from https://nodejs.org or your package manager."; exit 1; }
     cd web && npm install
 
 # Build frontend then backend (order matters: web/dist is embedded)
