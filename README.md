@@ -1,31 +1,26 @@
 # kachet
 
 Keyboard-first double-entry accounting for the web. A GnuCash replacement (not a clone):
-Rust + SQLite backend, Svelte frontend, built for fast data entry and navigation.
+Rust + SQLite backend, no-build Vue 3 frontend, built for fast data entry and navigation.
 
 ## Quick start
 
-Requires Rust, Node.js 20+, and [just](https://github.com/casey/just):
+Requires Rust and [just](https://github.com/casey/just) — no Node/npm; the
+frontend is plain JavaScript with a vendored copy of Vue 3, no build step:
 
 ```sh
-just serve                        # from a fresh clone: installs, builds, runs
+just serve                        # from a fresh clone: builds and runs
                                   # → http://127.0.0.1:8710
 just import your-file.gnucash     # optional: import GnuCash XML (gzipped or plain)
-just dev                          # development: hot-reloading frontend on :5173
+just dev                          # serve frontend from disk; edit + reload
 ```
 
-Without just, the equivalent is:
+Without just: `cargo build --release && ./target/release/kachet serve`.
 
-```sh
-(cd web && npm install && npm run build)            # must run before cargo build
-cargo build --release                               # embeds web/dist into the binary
-./target/release/kachet import your-file.gnucash
-./target/release/kachet serve
-```
-
-The result is a single self-contained binary — frontend assets are embedded at
-compile time. During development, `kachet serve --static-dir web/dist` serves
-from disk instead (or use `npm run dev` for hot reload, which proxies /api).
+The result is a single self-contained binary — the `web/` assets are embedded
+at compile time. During development, `kachet serve --static-dir web` serves
+them from disk so frontend edits only need a browser reload (the header
+banner will even tell you when the assets changed).
 
 The header shows a live backend connection indicator (websocket with
 auto-reconnect). When the server comes back with newer frontend assets than

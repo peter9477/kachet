@@ -1,20 +1,14 @@
 # kachet build/run recipes. From a fresh clone, `just serve` does everything.
+# The frontend is plain JS + vendored Vue served from web/ — no Node required.
 
 default:
     @just --list
 
-# Install frontend dependencies
-setup:
-    @command -v npm >/dev/null || { echo "error: npm not found — kachet needs Node.js to build its frontend (runtime does not; assets are embedded in the binary). Install from https://nodejs.org or your package manager."; exit 1; }
-    @node -e 'const v = +process.versions.node.split(".")[0]; if (v < 20) { console.error("error: Node " + process.versions.node + " is too old — kachet needs Node 20+ (Vite 6 requires it). Upgrade via nvm, brew, or https://nodejs.org"); process.exit(1) }'
-    cd web && npm install
-
-# Build frontend then backend (order matters: web/dist is embedded)
-build: setup
-    cd web && npm run build
+# Build the binary (web/ assets are embedded at compile time)
+build:
     cargo build --release
 
-# Build everything and run the server (http://127.0.0.1:8710)
+# Build and run the server (http://127.0.0.1:8710)
 serve db="kachet.db": build
     cargo run --release -- --db {{db}} serve
 
@@ -22,13 +16,9 @@ serve db="kachet.db": build
 import file db="kachet.db": build
     cargo run --release -- --db {{db}} import {{file}}
 
-# Development: backend + vite with hot reload (http://localhost:5173)
-dev: setup
-    #!/usr/bin/env bash
-    trap 'kill 0' EXIT
-    (cd web && npm run build)   # rust-embed needs web/dist to exist to compile
-    cargo run -- serve &
-    cd web && npm run dev
+# Development: serve frontend from disk so edits only need a browser reload
+dev db="kachet.db":
+    cargo run -- --db {{db}} serve --static-dir web
 
 # Run backend tests
 test:

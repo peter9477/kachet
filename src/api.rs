@@ -11,10 +11,10 @@ use std::collections::HashMap;
 use std::path::Path;
 use tower_http::services::{ServeDir, ServeFile};
 
-/// Frontend assets compiled into the binary. `npm run build` in web/
-/// must run before `cargo build`.
+/// Frontend assets compiled into the binary, straight from web/ —
+/// plain JS/ESM with a vendored Vue, no build step.
 #[derive(rust_embed::RustEmbed)]
-#[folder = "web/dist"]
+#[folder = "web"]
 struct Assets;
 
 async fn embedded_asset(uri: Uri) -> Response {
@@ -34,18 +34,27 @@ async fn embedded_asset(uri: Uri) -> Response {
 /// lets clients detect that the server is running newer frontend code.
 /// FNV-1a over the sorted mtimes — change detection, not integrity.
 fn web_hash(static_dir: Option<&Path>) -> String {
+    fn walk_mtimes(dir: &Path, out: &mut Vec<u64>) {
+        for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk_mtimes(&path, out);
+            } else if let Some(t) = entry
+                .metadata()
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            {
+                out.push(t.as_secs());
+            }
+        }
+    }
     let mut mtimes: Vec<u64> = match static_dir {
-        Some(dir) => std::fs::read_dir(dir)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .chain(std::fs::read_dir(dir.join("assets")).into_iter().flatten().flatten())
-            .filter_map(|e| e.metadata().ok())
-            .filter(|m| m.is_file())
-            .filter_map(|m| m.modified().ok())
-            .filter_map(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs())
-            .collect(),
+        Some(dir) => {
+            let mut v = Vec::new();
+            walk_mtimes(dir, &mut v);
+            v
+        }
         None => Assets::iter()
             .filter_map(|p| Assets::get(&p))
             .filter_map(|f| f.metadata.last_modified())

@@ -1,6 +1,6 @@
 # kachet
 
-Keyboard-first accounting app (GnuCash replacement, not a clone). Rust backend + Svelte web UI.
+Keyboard-first accounting app (GnuCash replacement, not a clone). Rust backend + no-build Vue 3 web UI.
 Reports must support non-standard fiscal years/quarters (e.g. a fiscal year ending July 31).
 
 PRIVACY: never commit the user's bookkeeping data or details derived from it (file names,
@@ -14,7 +14,10 @@ session memory (`kachet-project-goals`), not in this repo.
   - `money.rs` — exact rational (num/denom) amount arithmetic; never floats for stored amounts.
   - `import.rs` — GnuCash XML (gzipped or plain) importer.
   - `api.rs` — REST API + static file serving.
-- `web/` — Vite + Svelte 5 (runes) + TypeScript frontend.
+- `web/` — plain-JavaScript Vue 3 frontend, NO build step (user's explicit preference:
+  no Node/npm toolchain). Vue is vendored at `web/vendor/vue.esm-browser.prod.js`
+  (full build incl. runtime template compiler), wired via an importmap in index.html.
+  Components are .js files with template strings; JSDoc for types.
 - Amounts are stored as integer `num/denom` pairs (GnuCash-style) in both
   transaction currency (`value`) and account commodity (`quantity`).
   Splits must sum to zero in transaction currency; API enforces this.
@@ -22,11 +25,10 @@ session memory (`kachet-project-goals`), not in this repo.
 ## Build & run
 
 ```sh
-(cd web && npm run build)          # BEFORE cargo build: web/dist is embedded via rust-embed
-cargo build
+cargo build                        # embeds web/ via rust-embed; no frontend build exists
 ./target/debug/kachet --db kachet.db import <file>.gnucash   # idempotent (INSERT OR REPLACE)
 ./target/debug/kachet --db kachet.db serve                        # http://127.0.0.1:8710
-# dev: `cargo run -- serve` + `cd web && npm run dev` (vite proxies /api to :8710)
+# dev: `just dev` serves web/ from disk — edit JS, reload browser
 ```
 
 Note: cargo target dir may be redirected (check `echo $CARGO_TARGET_DIR`; it was /var/tmp/target).

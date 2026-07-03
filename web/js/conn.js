@@ -4,12 +4,14 @@
 // across reconnects, newer frontend code is available and we surface a
 // reload prompt rather than yanking the page out from under the user.
 
-export const conn = $state({ up: false, updateAvailable: false, version: '' })
+import { reactive } from 'vue'
+
+export const conn = reactive({ up: false, updateAvailable: false, version: '' })
 
 let attempts = 0
 // Hash of the assets this page was (presumably) loaded from: the first
 // hello after page load. Later hellos that differ mean the server updated.
-let loadedHash: string | null = null
+let loadedHash = null
 
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
@@ -20,7 +22,7 @@ function connect() {
     attempts = 0
   }
   ws.onmessage = (ev) => {
-    let msg: any
+    let msg
     try {
       msg = JSON.parse(ev.data)
     } catch {
