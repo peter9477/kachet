@@ -299,6 +299,12 @@
           if (opening) next.add(en.tx_id)
           else next.delete(en.tx_id)
           expanded = next
+          if (!opening) {
+            // Collapsing while on a split row: keep the selection on this
+            // transaction by moving it to the parent entry row.
+            const idx = rows.findIndex((r) => r.type === 'entry' && r.entry === en)
+            if (idx >= 0) selected = idx
+          }
           if (opening) {
             // Bring the newly revealed split rows onscreen, but never at
             // the cost of scrolling the selected entry itself out of view.
