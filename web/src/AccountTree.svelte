@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api, type Account, type Commodity } from './api'
+  import { ensureRowVisible } from './dom'
 
   let {
     accounts,
@@ -264,7 +265,8 @@
 
   function scrollSelectedIntoView() {
     requestAnimationFrame(() => {
-      document.querySelector('tr.selected')?.scrollIntoView({ block: 'nearest' })
+      const c = document.querySelector<HTMLElement>('.scroll')
+      ensureRowVisible(c, c?.querySelector<HTMLElement>('tr.selected') ?? null)
     })
   }
 </script>

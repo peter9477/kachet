@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api, type Account, type Entry, type Register, type TxIn } from './api'
+  import { ensureRowVisible } from './dom'
 
   let {
     accountId,
@@ -81,7 +82,8 @@
 
   function scrollSel() {
     requestAnimationFrame(() => {
-      document.querySelector('.register-scroll tr.selected')?.scrollIntoView({ block: 'nearest' })
+      const c = document.querySelector<HTMLElement>('.register-scroll')
+      ensureRowVisible(c, c?.querySelector<HTMLElement>('tr.selected') ?? null)
     })
   }
 
@@ -293,9 +295,20 @@
         const en = selectedEntry()
         if (en) {
           const next = new Set(expanded)
-          if (next.has(en.tx_id)) next.delete(en.tx_id)
-          else next.add(en.tx_id)
+          const opening = !next.has(en.tx_id)
+          if (opening) next.add(en.tx_id)
+          else next.delete(en.tx_id)
           expanded = next
+          if (opening) {
+            // Bring the newly revealed split rows onscreen, but never at
+            // the cost of scrolling the selected entry itself out of view.
+            requestAnimationFrame(() => {
+              const c = document.querySelector<HTMLElement>('.register-scroll')
+              const splits = c?.querySelectorAll<HTMLElement>(`tr[data-tx="${en.tx_id}"]`)
+              if (splits?.length) ensureRowVisible(c, splits[splits.length - 1])
+              ensureRowVisible(c, c?.querySelector<HTMLElement>('tr.selected') ?? null)
+            })
+          }
         }
         break
       }
@@ -382,7 +395,7 @@
               <td class="mono">{row.entry.date_posted}</td>
               <td class="mono">{row.entry.num ?? ''}</td>
               <td>{row.entry.description ?? ''}</td>
-              <td>{otherLabel(row.entry)}</td>
+              <td>{expanded.has(row.entry.tx_id) ? '▾ ' : ''}{otherLabel(row.entry)}</td>
               <td>{row.entry.reconcile_state}</td>
               <td class="amount mono">{dc.debit}</td>
               <td class="amount mono">{dc.credit}</td>
@@ -395,6 +408,7 @@
           <tr
             class="splitrow"
             class:selected={i === selected}
+            data-tx={row.entry.tx_id}
             onclick={() => (selected = i)}
           >
             <td></td>
