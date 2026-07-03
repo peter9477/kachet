@@ -141,8 +141,8 @@ td.amount, td.balance, th.amount, th.balance { text-align: right; }
   padding: 8px 10px 4px;
 }
 .acct-editor-grid {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr 2fr 1fr 2fr auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: end;
 }
@@ -152,8 +152,16 @@ td.amount, td.balance, th.amount, th.balance { text-align: right; }
   font-size: 0.8em;
   color: var(--dim);
   gap: 2px;
+  min-width: 0;
 }
+.acct-editor label:nth-child(1) { flex: 2 1 14em; } /* Name */
+.acct-editor label:nth-child(2) { flex: 0 1 6em; }  /* Code */
+.acct-editor label:nth-child(3) { flex: 0 1 9em; }  /* Type */
+.acct-editor label:nth-child(4) { flex: 2 1 16em; } /* Parent */
+.acct-editor label:nth-child(5) { flex: 0 1 9em; }  /* Commodity */
+.acct-editor label:nth-child(6) { flex: 2 1 14em; } /* Description */
 .acct-editor label.check {
+  flex: 0 0 auto;
   flex-direction: row;
   align-items: center;
   color: var(--fg);
@@ -165,6 +173,9 @@ td.amount, td.balance, th.amount, th.balance { text-align: right; }
   padding: 2px 4px;
   border: 1px solid var(--sel-border);
   border-radius: 2px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 .acct-editor input:focus, .acct-editor select:focus {
   outline: 2px solid var(--accent);
