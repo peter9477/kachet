@@ -5,11 +5,22 @@ Rust + SQLite backend, Svelte frontend, built for fast data entry and navigation
 
 ## Quick start
 
+Requires Rust, Node.js, and [just](https://github.com/casey/just):
+
+```sh
+just serve                        # from a fresh clone: installs, builds, runs
+                                  # → http://127.0.0.1:8710
+just import your-file.gnucash     # optional: import GnuCash XML (gzipped or plain)
+just dev                          # development: hot-reloading frontend on :5173
+```
+
+Without just, the equivalent is:
+
 ```sh
 (cd web && npm install && npm run build)            # must run before cargo build
 cargo build --release                               # embeds web/dist into the binary
-./target/release/kachet import your-file.gnucash    # GnuCash XML, gzipped or plain
-./target/release/kachet serve                       # http://127.0.0.1:8710
+./target/release/kachet import your-file.gnucash
+./target/release/kachet serve
 ```
 
 The result is a single self-contained binary — frontend assets are embedded at
