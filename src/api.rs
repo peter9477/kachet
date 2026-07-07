@@ -10,6 +10,7 @@ use sqlx::{Row, SqlitePool};
 use std::collections::HashMap;
 use std::path::Path;
 use tower_http::services::{ServeDir, ServeFile};
+use tower_http::set_header::SetResponseHeaderLayer;
 
 /// Frontend assets compiled into the binary, straight from web/ —
 /// plain JS/ESM with a vendored Vue, no build step.
@@ -24,7 +25,16 @@ async fn embedded_asset(uri: Uri) -> Response {
     match file {
         Some(f) => {
             let mime = mime_guess::from_path(path).first_or_octet_stream();
-            ([(header::CONTENT_TYPE, mime.as_ref())], f.data).into_response()
+            (
+                [
+                    (header::CONTENT_TYPE, mime.as_ref()),
+                    // "always revalidate" — without it browsers cache
+                    // heuristically and reloads can mix stale/fresh modules
+                    (header::CACHE_CONTROL, "no-cache"),
+                ],
+                f.data,
+            )
+                .into_response()
         }
         None => (StatusCode::NOT_FOUND, "not found").into_response(),
     }
@@ -72,8 +82,8 @@ fn web_hash(static_dir: Option<&Path>) -> String {
 }
 
 #[derive(Clone)]
-struct AppState {
-    pool: SqlitePool,
+pub(crate) struct AppState {
+    pub(crate) pool: SqlitePool,
     static_dir: Option<std::path::PathBuf>,
 }
 
@@ -96,10 +106,27 @@ pub fn router(pool: SqlitePool, static_dir: Option<&Path>) -> Router {
             "/api/transactions/{id}",
             axum::routing::put(update_tx).delete(delete_tx),
         )
+        .route("/api/reports/balance-sheet", get(crate::report::balance_sheet))
+        .route("/api/reports/income-statement", get(crate::report::income_statement))
+        .route("/api/reports/account", get(crate::report::account_report))
+        .route("/api/reports/{kind}/pdf", get(crate::report::report_pdf))
+        .route("/api/settings", get(get_settings).put(put_settings))
+        .route("/api/prices/fetch-boc", axum::routing::post(crate::prices::fetch_boc))
+        .route("/api/report-configs", get(list_report_configs).post(create_report_config))
+        .route(
+            "/api/report-configs/{id}",
+            axum::routing::put(update_report_config).delete(delete_report_config),
+        )
         .with_state(state)
         .pipe(|r| match static_dir {
             Some(dir) => r.fallback_service(
-                ServeDir::new(dir).fallback(ServeFile::new(dir.join("index.html"))),
+                tower::ServiceBuilder::new()
+                    // see embedded_asset: force revalidation on every load
+                    .layer(SetResponseHeaderLayer::overriding(
+                        header::CACHE_CONTROL,
+                        header::HeaderValue::from_static("no-cache"),
+                    ))
+                    .service(ServeDir::new(dir).fallback(ServeFile::new(dir.join("index.html")))),
             ),
             None => r.fallback(embedded_asset),
         })
@@ -113,7 +140,7 @@ trait Pipe: Sized {
 impl<T> Pipe for T {}
 
 /// Anyhow-compatible error type that renders as JSON.
-struct ApiError(StatusCode, String);
+pub(crate) struct ApiError(pub(crate) StatusCode, pub(crate) String);
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
@@ -133,7 +160,7 @@ impl From<sqlx::Error> for ApiError {
     }
 }
 
-type ApiResult<T> = Result<Json<T>, ApiError>;
+pub(crate) type ApiResult<T> = Result<Json<T>, ApiError>;
 
 // ---------- accounts ----------
 
@@ -215,23 +242,29 @@ async fn ws_handler(
 async fn handle_socket(mut socket: axum::extract::ws::WebSocket, st: AppState) {
     use axum::extract::ws::Message;
     // Greet with the current web-asset hash so the client can detect that
-    // the server is running newer frontend code than the loaded page.
-    let hello = serde_json::json!({
-        "type": "hello",
-        "web_hash": web_hash(st.static_dir.as_deref()),
-        "version": env!("CARGO_PKG_VERSION"),
-    });
-    if socket.send(Message::Text(hello.to_string().into())).await.is_err() {
+    // the server is running newer frontend code than the loaded page. The
+    // same message repeats every tick: with --static-dir the hash tracks
+    // live edits to web/, so the reload banner appears without needing a
+    // server restart or reconnect.
+    let hello = |st: &AppState| {
+        serde_json::json!({
+            "type": "hello",
+            "web_hash": web_hash(st.static_dir.as_deref()),
+            "version": env!("CARGO_PKG_VERSION"),
+        })
+    };
+    if socket.send(Message::Text(hello(&st).to_string().into())).await.is_err() {
         return;
     }
-    // Periodic pings keep intermediaries from idling the connection out and
-    // let the client detect a dead server quickly. Future server-push
-    // messages will be JSON Text frames with a {"type": ...} envelope.
-    let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
+    // The periodic re-hello doubles as a keepalive: it stops intermediaries
+    // from idling the connection out and lets the client detect a dead
+    // server quickly. Future server-push messages will be JSON Text frames
+    // with a {"type": ...} envelope.
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
     loop {
         tokio::select! {
             _ = interval.tick() => {
-                if socket.send(Message::Ping(Vec::new().into())).await.is_err() {
+                if socket.send(Message::Text(hello(&st).to_string().into())).await.is_err() {
                     break;
                 }
             }
@@ -572,7 +605,106 @@ struct TxIn {
     splits: Vec<SplitIn>,
 }
 
-fn new_guid() -> String {
+// ---------- settings ----------
+// One row per key, value JSON-encoded: per-key writes stay atomic and
+// individual settings are inspectable/migratable, unlike one JSON blob.
+
+async fn get_settings(State(st): State<AppState>) -> ApiResult<serde_json::Value> {
+    let rows = sqlx::query("SELECT key, value FROM settings").fetch_all(&st.pool).await?;
+    let mut out = serde_json::Map::new();
+    for r in rows {
+        let v = serde_json::from_str(r.get("value")).unwrap_or(serde_json::Value::Null);
+        out.insert(r.get("key"), v);
+    }
+    Ok(Json(serde_json::Value::Object(out)))
+}
+
+async fn put_settings(
+    State(st): State<AppState>,
+    Json(body): Json<serde_json::Map<String, serde_json::Value>>,
+) -> ApiResult<serde_json::Value> {
+    for (k, v) in &body {
+        sqlx::query(
+            "INSERT INTO settings (key, value) VALUES (?, ?)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        )
+        .bind(k)
+        .bind(v.to_string())
+        .execute(&st.pool)
+        .await?;
+    }
+    Ok(Json(serde_json::json!({ "updated": body.len() })))
+}
+
+// ---------- saved report configurations ----------
+
+#[derive(Serialize, Deserialize)]
+struct ReportConfig {
+    #[serde(default)]
+    id: String,
+    name: String,
+    kind: String,
+    params: serde_json::Value,
+}
+
+async fn list_report_configs(State(st): State<AppState>) -> ApiResult<Vec<ReportConfig>> {
+    let rows = sqlx::query("SELECT id, name, kind, params FROM report_configs ORDER BY name")
+        .fetch_all(&st.pool)
+        .await?;
+    let out = rows
+        .iter()
+        .map(|r| ReportConfig {
+            id: r.get("id"),
+            name: r.get("name"),
+            kind: r.get("kind"),
+            params: serde_json::from_str(r.get("params")).unwrap_or(serde_json::Value::Null),
+        })
+        .collect();
+    Ok(Json(out))
+}
+
+async fn create_report_config(
+    State(st): State<AppState>,
+    Json(body): Json<ReportConfig>,
+) -> ApiResult<serde_json::Value> {
+    let id = new_guid();
+    sqlx::query("INSERT INTO report_configs (id, name, kind, params) VALUES (?, ?, ?, ?)")
+        .bind(&id)
+        .bind(&body.name)
+        .bind(&body.kind)
+        .bind(body.params.to_string())
+        .execute(&st.pool)
+        .await?;
+    Ok(Json(serde_json::json!({ "id": id })))
+}
+
+async fn update_report_config(
+    State(st): State<AppState>,
+    AxPath(id): AxPath<String>,
+    Json(body): Json<ReportConfig>,
+) -> ApiResult<serde_json::Value> {
+    let n = sqlx::query("UPDATE report_configs SET name = ?, kind = ?, params = ? WHERE id = ?")
+        .bind(&body.name)
+        .bind(&body.kind)
+        .bind(body.params.to_string())
+        .bind(&id)
+        .execute(&st.pool)
+        .await?;
+    if n.rows_affected() == 0 {
+        return Err(ApiError(StatusCode::NOT_FOUND, format!("no report config {id}")));
+    }
+    Ok(Json(serde_json::json!({ "id": id })))
+}
+
+async fn delete_report_config(
+    State(st): State<AppState>,
+    AxPath(id): AxPath<String>,
+) -> ApiResult<serde_json::Value> {
+    sqlx::query("DELETE FROM report_configs WHERE id = ?").bind(&id).execute(&st.pool).await?;
+    Ok(Json(serde_json::json!({ "deleted": id })))
+}
+
+pub(crate) fn new_guid() -> String {
     // 32 hex chars, GnuCash-guid style, from OS randomness.
     let mut bytes = [0u8; 16];
     getrandom_fill(&mut bytes);

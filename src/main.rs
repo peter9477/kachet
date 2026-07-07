@@ -2,6 +2,9 @@ mod api;
 mod db;
 mod import;
 mod money;
+mod pdf;
+mod prices;
+mod report;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};

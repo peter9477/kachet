@@ -56,6 +56,18 @@ CREATE TABLE IF NOT EXISTS prices (
     value_denom  INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL                 -- JSON-encoded
+);
+
+CREATE TABLE IF NOT EXISTS report_configs (
+    id     TEXT PRIMARY KEY,
+    name   TEXT NOT NULL,
+    kind   TEXT NOT NULL,               -- balance-sheet | income-statement
+    params TEXT NOT NULL DEFAULT '{}'   -- JSON, shape depends on kind
+);
+
 CREATE INDEX IF NOT EXISTS idx_splits_account ON splits(account_id);
 CREATE INDEX IF NOT EXISTS idx_splits_tx ON splits(tx_id);
 CREATE INDEX IF NOT EXISTS idx_tx_date ON transactions(date_posted);
