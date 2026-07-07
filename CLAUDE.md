@@ -11,9 +11,12 @@ session memory (`kachet-project-goals`), not in this repo.
 
 - `src/` — Rust binary: axum HTTP server + GnuCash XML importer.
   - `db.rs` — SQLite schema via sqlx (kept Postgres-compatible: no SQLite-only types).
+    Includes `settings` (key + JSON value; e.g. `fiscal_year_end_month`, default 7).
   - `money.rs` — exact rational (num/denom) amount arithmetic; never floats for stored amounts.
   - `import.rs` — GnuCash XML (gzipped or plain) importer.
   - `api.rs` — REST API + static file serving.
+  - `report.rs` — balance sheet / income statement computation (generic row-table JSON)
+    + typst markup generation; `pdf.rs` — embedded typst compiler for PDF export.
 - `web/` — plain-JavaScript Vue 3 frontend, NO build step (user's explicit preference:
   no Node/npm toolchain). Vue is vendored at `web/vendor/vue.esm-browser.prod.js`
   (full build incl. runtime template compiler), wired via an importmap in index.html.
@@ -42,6 +45,10 @@ GnuCash to the cent. Specific figures: see session memory, not this file.
 ## Conventions
 
 - Keyboard-first: every UI feature must be reachable without the mouse; mouse is backup.
+- Commands bind to Ctrl-chords, never bare letters (stray-keypress safety); rationale
+  and the reserved-shortcut list live in `doc/decisions.md` — log new decisions there.
+- Mouse parity: keyboard-first, but no feature may be keyboard-only — every action
+  also needs a mouse path.
 - IDs are 32-char hex GUIDs (GnuCash style) so re-imports stay stable.
 - Don't copy GnuCash schema/UI wholesale — improve where it's awkward.
 - Priorities and scope: see memory `kachet-project-goals`.
