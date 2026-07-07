@@ -1,6 +1,6 @@
-import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { api } from './api.js'
-import { ensureRowVisible, fmtSigned } from './dom.js'
+import { ensureRowVisible, fmtSigned, pageJump } from './dom.js'
 import { hints } from './keys.js'
 
 function todayISO() {
@@ -23,9 +23,16 @@ export default {
   props: {
     accountId: { type: String, required: true },
     accounts: { type: Array, required: true },
+    // Whether this register is the active tab: inactive ones stay mounted
+    // (keeping their place) but must ignore keys and refresh when revisited.
+    active: { type: Boolean, default: true },
+    // Per-account view state (selected row), keyed by account id. Owned
+    // by the tab object so the app can persist it server-side.
+    views: { type: Object, default: () => ({}) },
   },
   emits: ['back', 'jump', 'changed'],
   setup(props, { emit }) {
+    const rootEl = ref(null)
     const reg = ref(null)
     const error = ref(null)
     const selected = ref(0)
@@ -50,13 +57,36 @@ export default {
       try {
         reg.value = await api.register(props.accountId)
         error.value = null
-        if (selectLast) selected.value = Math.max(0, rows.value.length - 1)
+        if (selectLast) {
+          // Restore the remembered row (by tx id, falling back to index),
+          // else default to the latest entry.
+          const v = props.views[props.accountId]
+          let idx = v?.selTx
+            ? rows.value.findIndex((r) => r.type === 'entry' && r.entry.tx_id === v.selTx)
+            : -1
+          if (idx < 0 && Number.isInteger(v?.selIdx)) {
+            idx = Math.min(v.selIdx, rows.value.length - 1)
+          }
+          selected.value = idx >= 0 ? idx : Math.max(0, rows.value.length - 1)
+        }
         scrollSel()
       } catch (e) {
         error.value = e.message
       }
     }
     load()
+
+    // Remember the selection so a page reload (even in another browser)
+    // comes back to the same row.
+    watch(selected, () => {
+      const r = rows.value[selected.value]
+      props.views[props.accountId] = { selTx: r?.entry?.tx_id, selIdx: selected.value }
+    })
+
+    // Pick up changes made in other tabs while this one was hidden.
+    watch(() => props.active, (a) => {
+      if (a && reg.value) load(false)
+    })
 
     const acct = computed(() => props.accounts.find((a) => a.id === props.accountId))
     const selectableAccounts = computed(() =>
@@ -90,7 +120,7 @@ export default {
 
     function scrollSel() {
       nextTick(() => {
-        const c = document.querySelector('.register-scroll')
+        const c = rootEl.value?.querySelector('.register-scroll')
         ensureRowVisible(c, c?.querySelector('tr.selected'))
       })
     }
@@ -106,16 +136,28 @@ export default {
     const selectedEntry = () => rows.value[selected.value]?.entry ?? null
 
     // ---- editor ----
-    function focusEditor() {
-      nextTick(() => document.querySelector('.editor input[data-first]')?.focus())
+    // Reveal the whole editor: it grows downward past the fold when opened
+    // (or extended) near the bottom. Prefer its top row if it's taller
+    // than the viewport.
+    function revealEditor() {
+      nextTick(() => {
+        const c = rootEl.value?.querySelector('.register-scroll')
+        const edRows = c?.querySelectorAll('tr.editor')
+        if (!edRows?.length) return
+        ensureRowVisible(c, edRows[edRows.length - 1])
+        ensureRowVisible(c, edRows[0])
+      })
     }
 
-    function openNew() {
+    function focusEditor() {
+      revealEditor()
+      nextTick(() => rootEl.value?.querySelector('.editor input[data-first]')?.focus())
+    }
+
+    function openNew(date) {
       editor.value = {
         txId: null,
-        date: reg.value?.entries.length
-          ? reg.value.entries[reg.value.entries.length - 1].date_posted
-          : todayISO(),
+        date,
         num: '',
         description: '',
         splits: [
@@ -148,8 +190,32 @@ export default {
       focusEditor()
     }
 
+    function openDuplicate() {
+      const e = selectedEntry()
+      if (!e) return
+      editor.value = {
+        txId: null,
+        expandOnSave: e.splits.length > 2,
+        date: todayISO(),
+        num: '',
+        description: e.description ?? '',
+        splits: e.splits.map((s) => {
+          const dc = fmtSigned(s.value)
+          return {
+            account_id: s.account_id,
+            memo: s.memo ?? '',
+            debit: dc.debit,
+            credit: dc.credit,
+            reconcile_state: 'n',
+          }
+        }),
+      }
+      focusEditor()
+    }
+
     function addSplitLine() {
       editor.value?.splits.push({ account_id: '', memo: '', debit: '', credit: '', reconcile_state: 'n' })
+      revealEditor()
     }
 
     function removeSplitLine(i) {
@@ -196,13 +262,27 @@ export default {
           })),
         }
         const keepDate = ed.date
+        let createdId = null
         if (ed.txId) await api.updateTx(ed.txId, tx)
-        else await api.createTx(tx)
+        else createdId = (await api.createTx(tx)).id
+        if (createdId && ed.expandOnSave) {
+          const next = new Set(expanded.value)
+          next.add(createdId)
+          expanded.value = next
+        }
         editor.value = null
         error.value = null
         await load(false)
         emit('changed')
-        jumpToDate(keepDate)
+        const idx = createdId
+          ? rows.value.findIndex((r) => r.type === 'entry' && r.entry.tx_id === createdId)
+          : -1
+        if (idx >= 0) {
+          selected.value = idx
+          scrollSel()
+        } else {
+          jumpToDate(keepDate)
+        }
       } catch (e) {
         error.value = e.message
       }
@@ -234,24 +314,31 @@ export default {
       if (others.length >= 1) emit('jump', others[0].account_id)
     }
 
-    function toggleSplits() {
-      const en = selectedEntry()
+    // Toggle any entry's split rows (mouse caret can target non-selected
+    // entries, and works even while another entry is being edited).
+    function toggleSplitsOf(en) {
       if (!en) return
+      const cur = rows.value[selected.value]
       const next = new Set(expanded.value)
       const opening = !next.has(en.tx_id)
       if (opening) next.add(en.tx_id)
       else next.delete(en.tx_id)
       expanded.value = next
-      if (!opening) {
-        // Collapsing while on a split row: keep the selection on this
-        // transaction by moving it to the parent entry row.
-        const idx = rows.value.findIndex((r) => r.type === 'entry' && r.entry === en)
+      // Re-anchor the selection: row indices shift when split rows appear
+      // or vanish. Keep the same logical row, or fall back to its entry
+      // row (a collapsed-away split row).
+      if (cur) {
+        let idx = rows.value.findIndex(
+          (r) => r.type === cur.type && r.entry === cur.entry && r.splitIdx === cur.splitIdx,
+        )
+        if (idx < 0) idx = rows.value.findIndex((r) => r.type === 'entry' && r.entry === cur.entry)
         if (idx >= 0) selected.value = idx
-      } else {
+      }
+      if (opening) {
         // Bring the newly revealed split rows onscreen, but never at
         // the cost of scrolling the selected entry itself out of view.
         nextTick(() => {
-          const c = document.querySelector('.register-scroll')
+          const c = rootEl.value?.querySelector('.register-scroll')
           const splits = c?.querySelectorAll(`tr[data-tx="${en.tx_id}"]`)
           if (splits?.length) ensureRowVisible(c, splits[splits.length - 1])
           ensureRowVisible(c, c?.querySelector('tr.selected'))
@@ -260,6 +347,7 @@ export default {
     }
 
     function onkeydown(e) {
+      if (!props.active) return
       if (editor.value) {
         if (e.key === 'Escape') {
           editor.value = null
@@ -268,13 +356,55 @@ export default {
           saveEditor()
           e.preventDefault()
           // e.code, not e.key: on macOS Option+S types "ß"
-        } else if (e.key === 'Insert' || (e.altKey && e.code === 'KeyS')) {
+        } else if (e.key === 'Insert' || (e.altKey && e.code === 'KeyS') || (e.ctrlKey && e.code === 'KeyI')) {
           addSplitLine()
+          e.preventDefault()
+        } else if (e.ctrlKey && ['KeyS', 'KeyD', 'KeyE', 'KeyJ'].includes(e.code)) {
+          // Our register chords are no-ops while editing, but must not
+          // fall through to the browser (save page, bookmark, downloads).
           e.preventDefault()
         }
         return
       }
+      // Ctrl-chords (see doc/decisions.md): Ctrl+letter is interceptable in
+      // every browser/OS we care about, unlike bare letters (stray-keypress
+      // risk) or Ctrl+N/T/W (reserved by browsers on Windows/Linux).
+      if (e.ctrlKey && !e.altKey && !e.metaKey) {
+        switch (e.code) {
+          case 'Enter':
+          case 'NumpadEnter':
+            openNew(todayISO())
+            break
+          case 'KeyI':
+            openNew(selectedEntry()?.date_posted ?? todayISO())
+            break
+          case 'KeyD':
+            openDuplicate()
+            break
+          case 'KeyE':
+            openEdit()
+            break
+          case 'KeyS':
+            toggleSplitsOf(selectedEntry())
+            break
+          case 'KeyJ':
+            jumpOther()
+            break
+          default:
+            return
+        }
+        e.preventDefault()
+        scrollSel()
+        return
+      }
       const n = rows.value.length
+      // Mac laptops have no Delete (forward-delete) key; ⌘⌫ is the alternate,
+      // matching the account tree. Plain Backspace stays "back".
+      if (e.key === 'Delete' || (e.metaKey && e.key === 'Backspace')) {
+        deleteSelected()
+        e.preventDefault()
+        return
+      }
       switch (e.key) {
         case 'ArrowDown':
           selected.value = Math.min(n - 1, selected.value + 1)
@@ -283,10 +413,10 @@ export default {
           selected.value = Math.max(0, selected.value - 1)
           break
         case 'PageDown':
-          selected.value = Math.min(n - 1, selected.value + 20)
+          selected.value = Math.min(n - 1, selected.value + pageJump(rootEl.value?.querySelector('.register-scroll')))
           break
         case 'PageUp':
-          selected.value = Math.max(0, selected.value - 20)
+          selected.value = Math.max(0, selected.value - pageJump(rootEl.value?.querySelector('.register-scroll')))
           break
         case 'Home':
           selected.value = 0
@@ -307,21 +437,10 @@ export default {
           jumpToDate(shiftDate(selectedEntry()?.date_posted ?? todayISO(), 0, 1))
           break
         case ' ':
-          toggleSplits()
+          toggleSplitsOf(selectedEntry())
           break
         case 'Enter':
-        case 'e':
           openEdit()
-          break
-        case 'n':
-          openNew()
-          break
-        case 'j':
-          jumpOther()
-          break
-        case 'd':
-        case 'Delete':
-          deleteSelected()
           break
         case 'Escape':
         case 'Backspace':
@@ -338,12 +457,13 @@ export default {
     onUnmounted(() => window.removeEventListener('keydown', onkeydown))
 
     return {
-      reg, error, selected, expanded, editor, rows, kindLabels, selectableAccounts, hints,
-      fmtSigned, otherLabel, openEdit, removeSplitLine, editorImbalance,
+      rootEl, reg, error, selected, expanded, editor, rows, kindLabels, selectableAccounts, hints,
+      fmtSigned, otherLabel, openEdit, removeSplitLine, editorImbalance, toggleSplitsOf,
       select: (i) => (selected.value = i),
     }
   },
   template: `
+<div class="pane" ref="rootEl">
 <div class="scroll register-scroll">
   <table class="register">
     <thead>
@@ -367,7 +487,9 @@ export default {
           <td class="mono">{{ row.entry.date_posted }}</td>
           <td class="mono">{{ row.entry.num ?? '' }}</td>
           <td>{{ row.entry.description ?? '' }}</td>
-          <td>{{ expanded.has(row.entry.tx_id) ? '▾ ' : '' }}{{ otherLabel(row.entry) }}</td>
+          <td><span class="caret" @click.stop="toggleSplitsOf(row.entry)"
+            :title="expanded.has(row.entry.tx_id) ? 'Collapse splits' : 'Expand splits'"
+            >{{ expanded.has(row.entry.tx_id) ? '▾' : '▸' }}</span>{{ otherLabel(row.entry) }}</td>
           <td>{{ row.entry.reconcile_state }}</td>
           <td class="amount mono">{{ fmtSigned(row.entry.amount).debit }}</td>
           <td class="amount mono">{{ fmtSigned(row.entry.amount).credit }}</td>
@@ -458,9 +580,10 @@ export default {
 <div v-if="error" class="error-msg">{{ error }}</div>
 
 <div class="statusbar">
-  <span><b>{{ reg?.account_name ?? '' }}</b></span>
   <span>{{ reg?.entries.length ?? 0 }} entries</span>
-  <span v-if="reg?.entries.length">Balance: <b>{{ reg.entries[reg.entries.length - 1].balance }}</b></span>
+  <span v-if="reg?.entries.length" class="push-right mono">Balance: <b>{{ reg.entries[reg.entries.length - 1].balance }}</b></span>
+  <span class="hint break-line">Esc: back · ↑↓ PgUp PgDn: move · [ ] { }: month/year · Space/{{ hints.regSplits }}: splits · {{ hints.regNew }}: new · {{ hints.regInsert }}: insert · {{ hints.regDup }}: duplicate · Enter/{{ hints.regEdit }}: edit · {{ hints.regJump }}: jump · {{ hints.regDelete }}: delete · {{ hints.tabToggle }}: tabs · {{ hints.tabCycle }}: switch tab</span>
+</div>
 </div>
 `,
 }

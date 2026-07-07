@@ -71,22 +71,49 @@ td.amount, td.balance, th.amount, th.balance { text-align: right; }
   border-top: 2px solid var(--head-bg);
   padding: 4px 10px;
   display: flex;
-  gap: 1.5em;
+  flex-wrap: wrap;
+  gap: 4px 1.5em;
   font-size: 0.9em;
   color: var(--dim);
   background: #f7f5ec;
 }
 .statusbar b { color: var(--fg); }
+/* Right edge, mirroring the table's Balance column above */
+.statusbar .push-right { margin-left: auto; }
+/* Force following items (the hints) onto their own wrapped line */
+.statusbar .break-line { flex-basis: 100%; }
+
+.caret {
+  cursor: pointer;
+  color: var(--dim);
+  display: inline-block;
+  width: 1.1em;
+  text-align: center;
+}
+.caret:hover { color: var(--fg); }
 
 .topbar {
   background: var(--head-bg);
   color: var(--head-fg);
-  padding: 5px 10px;
+  padding: 0 10px;
   display: flex;
   gap: 1em;
-  align-items: baseline;
+  align-items: center;
+  /* Fixed height regardless of tab: single line, no wrap, clipped */
+  flex: 0 0 auto;
+  height: 2em;
+  white-space: nowrap;
+  overflow: hidden;
 }
-.topbar h1 { font-size: 1.05em; margin: 0; }
+.topbar h1 { font-size: 1em; margin: 0; }
+.page-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  font-size: 1.05em;
+}
 .topbar-right {
   margin-left: auto;
   display: flex;
@@ -113,9 +140,61 @@ td.amount, td.balance, th.amount, th.balance { text-align: right; }
   cursor: pointer;
   text-decoration: underline;
 }
-.topbar .hint { font-size: 0.85em; opacity: 0.85; }
 
 .scroll { flex: 1; overflow-y: auto; }
+
+.main { flex: 1; display: flex; min-height: 0; }
+.content { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.pane { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+
+.sidebar {
+  flex: 0 0 13em;
+  background: #f0ede0;
+  border-right: 2px solid var(--head-bg);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.sidebar-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 4px 3px 10px;
+  color: var(--dim);
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.sidebar-toggle, .sidebar-collapsed, .tab-close {
+  font: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--dim);
+  padding: 0 4px;
+}
+.sidebar-toggle:hover, .sidebar-collapsed:hover { color: var(--fg); }
+.sidebar-collapsed {
+  flex: 0 0 auto;
+  background: #f0ede0;
+  border-right: 2px solid var(--head-bg);
+}
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 10px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  white-space: nowrap;
+}
+.tab:hover { background: var(--row-alt); }
+.tab.active {
+  background: var(--sel-bg);
+  border-left-color: var(--sel-border);
+}
+.tab-title { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.tab-close:hover { color: var(--neg); }
 
 .editor td { background: #fff8dc !important; }
 .editor input, .editor select {
@@ -188,3 +267,132 @@ td.amount, td.balance, th.amount, th.balance { text-align: right; }
 
 .tree-indent { color: var(--dim); }
 .placeholder-name { font-style: italic; color: var(--dim); }
+
+/* ---- reports ---- */
+
+.sidebar-reports-head { margin-top: 1em; border-top: 1px solid #ddd8c4; }
+
+.report-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  padding: 6px 10px;
+  background: #f0ede0;
+  border-bottom: 1px solid #ddd8c4;
+  font-size: 0.9em;
+}
+.report-toolbar label { display: flex; align-items: center; gap: 4px; color: var(--dim); }
+.report-toolbar input, .report-toolbar select, .report-toolbar button {
+  font: inherit;
+  padding: 1px 6px;
+  border: 1px solid #c9c4ae;
+  border-radius: 2px;
+  background: white;
+}
+.report-toolbar button, .report-toolbar .toolbar-btn { cursor: pointer; }
+.report-toolbar .toolbar-btn {
+  font: inherit;
+  padding: 1px 6px;
+  border: 1px solid #c9c4ae;
+  border-radius: 2px;
+  background: white;
+  color: inherit;
+  text-decoration: none;
+}
+.report-toolbar button:hover, .report-toolbar .toolbar-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.report-toolbar .toolbar-gap { flex: 1; }
+.report-toolbar .cfg-name { width: 16em; }
+
+.report-doc { padding: 1em 2em 3em; max-width: 60em; }
+.report-doc h2 { font-size: 1.15em; margin: 0.2em 0 0.8em; }
+.report-period { font-weight: normal; color: var(--dim); font-size: 0.9em; margin-left: 0.6em; }
+
+.report-table { border-collapse: collapse; width: 100%; }
+.report-table td { padding: 1px 8px; vertical-align: top; }
+.report-table col.report-amt-col { width: 8.5em; }
+.report-table .r-label a { color: var(--accent); text-decoration: none; }
+.report-table .r-label a:hover { text-decoration: underline; }
+.report-table tr.r-section td {
+  background: var(--row-alt);
+  font-weight: 700;
+  border-top: 1px solid #ddd8c4;
+}
+.report-table tr.r-subtotal td { color: #333; }
+.report-table tr.r-subtotal td.r-figure { border-top: 1px solid #999; }
+.report-table tr.r-total td { font-weight: 700; }
+.report-table tr.r-total td.r-figure { border-top: 1px solid #999; }
+.report-table tr.r-net td { font-weight: 700; border-top: 2px solid var(--head-bg); }
+.report-table tr.r-blank td { height: 0.9em; }
+.report-table .r-foreign { color: var(--dim); font-size: 0.85em; }
+
+.report-prompt { color: var(--dim); padding: 1em 0; }
+.report-toolbar .acct-multi { min-width: 16em; }
+.report-toolbar label.check { flex-direction: row; }
+.acct-group h3 { font-size: 1em; margin: 1em 0 0.3em; }
+.acct-group h3 a { color: var(--accent); text-decoration: none; }
+.acct-group h3 a:hover { text-decoration: underline; }
+.acct-list th {
+  text-align: left;
+  border-bottom: 1px solid #ddd8c4;
+  background: var(--row-alt);
+  padding: 2px 8px;
+  position: static;
+}
+.acct-list th.amount { text-align: right; }
+.acct-list tr.r-total td { font-weight: 600; }
+.acct-grand { margin-top: 0.8em; text-align: right; }
+
+.settings-grid { display: flex; flex-direction: column; gap: 0.9em; max-width: 34em; }
+.settings-grid label { display: flex; align-items: center; gap: 0.5em; }
+.settings-grid select, .settings-grid button {
+  font: inherit;
+  padding: 2px 8px;
+  border: 1px solid #c9c4ae;
+  border-radius: 2px;
+  background: white;
+  cursor: pointer;
+}
+.settings-note { color: var(--dim); font-size: 0.85em; }
+.settings-status { color: var(--head-bg); margin-left: 0.6em; }
+
+/* ---- report launcher overlay ---- */
+
+.launcher-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 14vh;
+  z-index: 10;
+}
+.launcher {
+  background: var(--bg);
+  border: 2px solid var(--head-bg);
+  border-radius: 4px;
+  min-width: 24em;
+  max-height: 60vh;
+  overflow-y: auto;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+}
+.launcher-title {
+  background: var(--head-bg);
+  color: var(--head-fg);
+  padding: 4px 10px;
+  font-weight: 600;
+}
+.launcher-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 2em;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.launcher-item.selected { background: var(--sel-bg); }
+.launcher-note { color: var(--dim); font-size: 0.85em; }
+.launcher-hint { padding: 4px 10px; color: var(--dim); font-size: 0.8em; border-top: 1px solid #ddd8c4; }

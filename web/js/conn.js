@@ -1,8 +1,9 @@
 // Live backend connection status over a websocket. Reconnects with
-// backoff; `conn.up` drives the header indicator. The server greets each
-// connection with a hash of its web assets ("webhash"); if that changes
-// across reconnects, newer frontend code is available and we surface a
-// reload prompt rather than yanking the page out from under the user.
+// backoff; `conn.up` drives the header indicator. The server sends a hash
+// of its web assets ("webhash") on connect and every ~5s after; if it
+// ever differs from the hash at page load, newer frontend code is
+// available and we surface a reload prompt rather than yanking the page
+// out from under the user.
 
 import { reactive } from 'vue'
 

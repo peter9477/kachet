@@ -1,15 +1,20 @@
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { api } from './api.js'
-import { ensureRowVisible } from './dom.js'
+import { ensureRowVisible, pageJump } from './dom.js'
 import { hints } from './keys.js'
 
 const KINDS = ['ASSET', 'BANK', 'CASH', 'LIABILITY', 'CREDIT', 'INCOME', 'EXPENSE', 'EQUITY', 'TRADING']
 
 export default {
   name: 'AccountTree',
-  props: { accounts: { type: Array, required: true } },
+  props: {
+    accounts: { type: Array, required: true },
+    // False while another tab is active: stay mounted but ignore keys.
+    active: { type: Boolean, default: true },
+  },
   emits: ['open', 'changed'],
   setup(props, { emit }) {
+    const rootEl = ref(null)
     const collapsed = ref(new Set())
     const selected = ref(0)
     const filter = ref('')
@@ -73,7 +78,7 @@ export default {
     }
 
     function focusEditor() {
-      nextTick(() => document.querySelector('.acct-editor input[data-first]')?.focus())
+      nextTick(() => rootEl.value?.querySelector('.acct-editor input[data-first]')?.focus())
     }
 
     function openNew() {
@@ -156,12 +161,13 @@ export default {
 
     function scrollSel() {
       nextTick(() => {
-        const c = document.querySelector('.scroll')
+        const c = rootEl.value?.querySelector('.scroll')
         ensureRowVisible(c, c?.querySelector('tr.selected'))
       })
     }
 
     function onkeydown(e) {
+      if (!props.active) return
       if (editor.value) {
         if (e.key === 'Escape') {
           editor.value = null
@@ -193,7 +199,12 @@ export default {
       }
       const n = rows.value.length
       if (!n) {
-        if (e.key !== 'Escape' && e.key !== 'Backspace' && e.key.length === 1) filter.value += e.key
+        // Filter matches nothing: still allow editing/clearing the filter.
+        if (e.key === 'Escape') filter.value = ''
+        else if (e.key === 'Backspace') filter.value = filter.value.slice(0, -1)
+        else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) filter.value += e.key
+        else return
+        e.preventDefault()
         return
       }
       switch (e.key) {
@@ -204,10 +215,10 @@ export default {
           selected.value = Math.max(0, selected.value - 1)
           break
         case 'PageDown':
-          selected.value = Math.min(n - 1, selected.value + 20)
+          selected.value = Math.min(n - 1, selected.value + pageJump(rootEl.value?.querySelector('.scroll')))
           break
         case 'PageUp':
-          selected.value = Math.max(0, selected.value - 20)
+          selected.value = Math.max(0, selected.value - pageJump(rootEl.value?.querySelector('.scroll')))
           break
         case 'Home':
           selected.value = 0
@@ -261,12 +272,13 @@ export default {
     const indent = (depth) => ' '.repeat(depth * 3)
 
     return {
-      KINDS, hints, collapsed, selected, filter, error, editor, commodities, rows, parentOptions,
+      rootEl, KINDS, hints, collapsed, selected, filter, error, editor, commodities, rows, parentOptions,
       openNew, openEdit, saveEditor, deleteSelected, indent,
       open: (id) => emit('open', id),
     }
   },
   template: `
+<div class="pane" ref="rootEl">
 <div v-if="editor" class="acct-editor">
   <div class="acct-editor-grid">
     <label>Name <input data-first type="text" v-model="editor.name" /></label>
@@ -330,7 +342,8 @@ export default {
 <div class="statusbar">
   <span><b>{{ rows.length }}</b> accounts</span>
   <span v-if="filter">filter: <b>{{ filter }}</b> (Esc clears)</span>
-  <span>{{ hints.newItem }}: new · {{ hints.edit }}: edit · {{ hints.del }}: delete</span>
+  <span class="hint">↑↓: move · ←→: collapse/expand · Enter: open register · type to filter · {{ hints.newItem }}: new · {{ hints.edit }}: edit · {{ hints.del }}: delete · {{ hints.tabToggle }}: tabs · {{ hints.tabCycle }}: switch tab</span>
+</div>
 </div>
 `,
 }
